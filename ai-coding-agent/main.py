@@ -4,7 +4,7 @@ import sys
 import subprocess
 import click
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.styles import Style
 
 from agent.agent import Agent
@@ -39,10 +39,43 @@ class CLI:
             ],
         )
 
-        command_list = ["/help", "/exit", "/quit", "/clear", "/config", "/model", "/approval", "/stats", "/tools", "/mcp", "/save", "/checkpoint", "/checkpoints", "/restore", "/sessions", "/resume"]
-        completer = WordCompleter(command_list, ignore_case=True, sentence=True)
-        style = Style.from_dict({"prompt": "ansiblue bold"})
-        prompt_session = PromptSession(completer=completer, style=style)
+        class CommandCompleter(Completer):
+            def __init__(self):
+                self.commands = {
+                    "/help": "Show this help",
+                    "/exit": "Exit the agent",
+                    "/quit": "Exit the agent",
+                    "/clear": "Clear conversation history",
+                    "/config": "Show current configuration",
+                    "/model": "Change the model",
+                    "/approval": "Change approval mode",
+                    "/stats": "Show session statistics",
+                    "/tools": "List available tools",
+                    "/mcp": "Show MCP server status",
+                    "/save": "Save current session",
+                    "/checkpoint": "Create a checkpoint",
+                    "/checkpoints": "List available checkpoints",
+                    "/restore": "Restore a checkpoint",
+                    "/sessions": "List saved sessions",
+                    "/resume": "Resume a saved session"
+                }
+
+            def get_completions(self, document, complete_event):
+                text = document.text_before_cursor.lstrip()
+                if text.startswith('/'):
+                    for cmd, desc in self.commands.items():
+                        if cmd.startswith(text.lower()):
+                            yield Completion(cmd, start_position=-len(text), display_meta=desc)
+
+        completer = CommandCompleter()
+        style = Style.from_dict({
+            "prompt": "ansiblue bold",
+            "completion-menu.completion": "bg:#333333 #ffffff",
+            "completion-menu.completion.current": "bg:#00aa00 #ffffff",
+            "completion-menu.meta.completion": "bg:#333333 #aaaaaa",
+            "completion-menu.meta.completion.current": "bg:#00aa00 #ffffff",
+        })
+        prompt_session = PromptSession(completer=completer, style=style, complete_while_typing=True)
 
         async with Agent(
             self.config,
