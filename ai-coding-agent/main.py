@@ -404,7 +404,7 @@ def main(
     cwd: Path | None,
     cli_flag: bool,
 ):
-    load_dotenv()
+    load_dotenv(Path(__file__).parent / ".env")
     
     try:
         config = load_config(cwd=cwd)

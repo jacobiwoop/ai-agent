@@ -122,6 +122,10 @@ class Config(BaseModel):
         return os.environ.get("TELEGRAM_AUTHORIZED_CHAT_ID")
 
     @property
+    def groq_api_key(self) -> str | None:
+        return os.environ.get("GROQ_API_KEY")
+
+    @property
     def model_name(self) -> str:
         return self.model.name
 

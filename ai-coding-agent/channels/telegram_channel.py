@@ -19,7 +19,6 @@ class TelegramChannel:
         self.bot_token = config.telegram_bot_token
         self.authorized_chat_id = config.telegram_authorized_chat_id
         self._pending_input_future: asyncio.Future | None = None
-        self._pending_input_future: asyncio.Future | None = None
         
         if not self.bot_token or not self.authorized_chat_id:
             raise ValueError("TELEGRAM_BOT_TOKEN or TELEGRAM_AUTHORIZED_CHAT_ID is missing in environment variables.")
@@ -40,6 +39,7 @@ class TelegramChannel:
     def _setup_handlers(self):
         self.app.add_handler(CommandHandler("start", self.start_command))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, self.handle_voice))
 
     async def _is_authorized(self, update: Update) -> bool:
         if str(update.effective_chat.id) != str(self.authorized_chat_id):
@@ -62,13 +62,13 @@ class TelegramChannel:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._is_authorized(update):
             return
-            
         user_message = update.message.text
-        
         if self._pending_input_future and not self._pending_input_future.done():
             self._pending_input_future.set_result(user_message)
             return
-            
+        await self._run_agent(update, user_message)
+
+    async def _run_agent(self, update: Update, user_message: str):
         async def telegram_ask_user(question: str) -> str:
             await update.message.reply_text(f"🤖 *Agent asks:* {question}", parse_mode="Markdown")
             self._pending_input_future = asyncio.Future()
@@ -82,40 +82,72 @@ class TelegramChannel:
 
         async with Agent(self.config, session=self.session) as agent:
             assistant_response = ""
-            current_tool = None
             
-            # Agent async generator loop
             async for event in agent.run(user_message):
                 if event.type == AgentEventType.TEXT_DELTA:
                     assistant_response += event.data.get("content", "")
-                
                 elif event.type == AgentEventType.TEXT_COMPLETE:
                     assistant_response = event.data.get("content", "")
-                    
                 elif event.type == AgentEventType.TOOL_CALL_START:
                     tool_name = event.data.get("name", "unknown")
                     await status_msg.edit_text(f"🔧 *Running tool:* `{tool_name}`", parse_mode="Markdown")
-                    
                 elif event.type == AgentEventType.TOOL_CALL_COMPLETE:
                     tool_name = event.data.get("name", "unknown")
                     success = event.data.get("success", False)
                     icon = "✅" if success else "❌"
                     await update.message.reply_text(f"{icon} *Tool finished:* `{tool_name}`", parse_mode="Markdown")
                     await status_msg.edit_text("🤔 *Thinking...*", parse_mode="Markdown")
-                    
                 elif event.type == AgentEventType.AGENT_ERROR:
                     error = event.data.get("error", "Unknown error")
                     await status_msg.edit_text(f"❌ *Agent Error:*\n`{error}`", parse_mode="Markdown")
                     return
 
-            # Final response
             if assistant_response:
-                # Telegram has a 4096 character limit per message
                 if len(assistant_response) > 4000:
                     for i in range(0, len(assistant_response), 4000):
                         await update.message.reply_text(assistant_response[i:i+4000])
                 else:
                     await status_msg.edit_text(assistant_response, parse_mode="Markdown")
+
+    async def handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle incoming voice messages by transcribing them with Whisper."""
+        import tempfile, os
+        if not await self._is_authorized(update):
+            return
+
+        status_msg = await update.message.reply_text("🎤 *Transcribing voice message...*", parse_mode="Markdown")
+
+        try:
+            voice = update.message.voice or update.message.audio
+            tg_file = await context.bot.get_file(voice.file_id)
+            
+            suffix = ".ogg" if update.message.voice else ".mp3"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp_path = tmp.name
+            
+            await tg_file.download_to_drive(tmp_path)
+            
+            # Use the WhisperTool to transcribe
+            from groq import Groq
+            client = Groq(api_key=self.config.groq_api_key)
+            with open(tmp_path, "rb") as audio_file:
+                transcription = client.audio.transcriptions.create(
+                    file=(os.path.basename(tmp_path), audio_file.read()),
+                    model="whisper-large-v3",
+                    temperature=0,
+                    response_format="verbose_json",
+                )
+            os.unlink(tmp_path)
+            
+            transcribed_text = transcription.text
+            await status_msg.edit_text(f"🎤 *Voice transcribed:*\n_{transcribed_text}_", parse_mode="Markdown")
+            
+            # Feed transcription to the agent directly
+            await self._run_agent(update, transcribed_text)
+
+        except Exception as e:
+            await status_msg.edit_text(f"❌ *Transcription error:* `{e}`", parse_mode="Markdown")
+            logger.error(f"Voice transcription failed: {e}")
 
     async def start(self):
         logger.info("Initializing Telegram Bot...")

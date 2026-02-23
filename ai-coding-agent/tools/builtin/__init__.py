@@ -10,6 +10,7 @@ from tools.builtin.web_search import WebSearchTool
 from tools.builtin.write_file import WriteFileTool
 from tools.builtin.web_fetch_md import WebFetchMdTool
 from tools.builtin.ask_user import AskUserTool
+from tools.builtin.whisper import WhisperTool
 
 __all__ = [
     "ReadFileTool",
@@ -24,6 +25,7 @@ __all__ = [
     "TodosTool",
     "MemoryTool",
     "AskUserTool",
+    "WhisperTool",
 ]
 
 
@@ -41,4 +43,5 @@ def get_all_builtin_tools() -> list[type]:
         TodosTool,
         MemoryTool,
         AskUserTool,
+        WhisperTool,
     ]
