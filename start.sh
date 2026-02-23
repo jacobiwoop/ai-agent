@@ -151,23 +151,31 @@ done
 # ─────────────────────────────────────────────
 #  VENV — créer et installer si absent
 # ─────────────────────────────────────────────
-if [ ! -f ".venv/bin/activate" ]; then
-    warning "Environnement virtuel absent. Création en cours..."
-    python3 -m venv .venv
-    .venv/bin/pip install --upgrade pip -q
-    if [ -f "ai-coding-agent/requirements.txt" ]; then
-        .venv/bin/pip install -r ai-coding-agent/requirements.txt -q
-    fi
-    info "Environnement virtuel prêt."
-else
+if [ -f ".venv/bin/activate" ]; then
     info "Environnement virtuel trouvé."
+else
+    warning "Environnement virtuel absent. Création en cours..."
+    if python3 -m venv .venv 2>/dev/null; then
+        .venv/bin/pip install --upgrade pip -q
+        if [ -f "ai-coding-agent/requirements.txt" ]; then
+            .venv/bin/pip install -r ai-coding-agent/requirements.txt -q
+        fi
+        info "Environnement virtuel prêt."
+    else
+        warning "Impossible de créer l'environnement virtuel (bloqué par le système, ex: Conda)."
+        warning "Installation des dépendances dans l'environnement Python global..."
+        if [ -f "ai-coding-agent/requirements.txt" ]; then
+            pip install -r ai-coding-agent/requirements.txt -q || true
+        fi
+    fi
 fi
-
 
 # ─────────────────────────────────────────────
 #  7. LANCER LE PROJET
 # ─────────────────────────────────────────────
 echo ""
 info "Lancement de l'agent AI..."
-source .venv/bin/activate
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+fi
 python ai-coding-agent/main.py "$@"
