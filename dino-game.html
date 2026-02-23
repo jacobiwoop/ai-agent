@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu du Dinosaure</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #f7f7f7;
+            font-family: 'Courier New', monospace;
+        }
+
+        .game-container {
+            text-align: center;
+        }
+
+        canvas {
+            border: 2px solid #535353;
+            background: #fff;
+        }
+
+        .score {
+            font-size: 20px;
+            color: #535353;
+            margin-bottom: 10px;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            color: #535353;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+        }
+
+        .game-over h2 {
+            color: #535353;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .game-over button {
+            padding: 10px 30px;
+            font-size: 18px;
+            background: #535353;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .game-over button:hover {
+            background: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="score">Score: <span id="score">0</span></div>
+        <canvas id="game" width="800" height="200"></canvas>
+        <div class="instructions">Appuie sur ESPACE ou ↑ pour sauter</div>
+        <div class="game-over" id="gameOver">
+            <h2>GAME OVER</h2>
+            <button onclick="restartGame()">Rejouer</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverScreen = document.getElementById('gameOver');
+
+        // Variables du jeu
+        let dino = {
+            x: 50,
+            y: 150,
+            width: 40,
+            height: 40,
+            jumping: false,
+            jumpVelocity: 0,
+            grounded: true
+        };
+
+        let obstacles = [];
+        let gameSpeed = 5;
+        let score = 0;
+        let gameRunning = true;
+        let frameCount = 0;
+
+        const gravity = 0.6;
+        const jumpPower = -12;
+        const groundY = 150;
+
+        // Dessiner le dinosaure
+        function drawDino() {
+            ctx.fillStyle = '#535353';
+            
+            // Corps
+            ctx.fillRect(dino.x + 10, dino.y, 20, 25);
+            
+            // Tête
+            ctx.fillRect(dino.x + 20, dino.y - 15, 20, 20);
+            
+            // Œil
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(dino.x + 32, dino.y - 10, 4, 4);
+            ctx.fillStyle = '#535353';
+            
+            // Cou
+            ctx.fillRect(dino.x + 25, dino.y + 5, 5, 5);
+            
+            // Queue
+            ctx.fillRect(dino.x, dino.y + 10, 15, 5);
+            ctx.fillRect(dino.x - 5, dino.y + 5, 10, 5);
+            
+            // Pattes (animation)
+            const legOffset = Math.floor(frameCount / 10) % 2 === 0 ? 0 : 5;
+            ctx.fillRect(dino.x + 10, dino.y + 25, 5, 15 - legOffset);
+            ctx.fillRect(dino.x + 25, dino.y + 25, 5, 15 - (legOffset === 0 ? 5 : 0));
+            
+            // Bras
+            ctx.fillRect(dino.x + 30, dino.y + 10, 10, 5);
+        }
+
+        // Dessiner le sol
+        function drawGround() {
+            ctx.strokeStyle = '#535353';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY + 40);
+            ctx.lineTo(canvas.width, groundY + 40);
+            ctx.stroke();
+
+            // Points au sol
+            for (let i = 0; i < canvas.width; i += 20) {
+                const offset = (frameCount * gameSpeed) % 20;
+                ctx.fillStyle = '#535353';
+                if (Math.random() > 0.7) {
+                    ctx.fillRect(i - offset, groundY + 42 + Math.random() * 8, 2, 2);
+                }
+            }
+        }
+
+        // Créer un obstacle
+        function createObstacle() {
+            const types = ['cactus-small', 'cactus-medium', 'cactus-large'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            let width, height;
+            switch(type) {
+                case 'cactus-small':
+                    width = 20;
+                    height = 30;
+                    break;
+                case 'cactus-medium':
+                    width = 30;
+                    height = 40;
+                    break;
+                case 'cactus-large':
+                    width = 40;
+                    height = 50;
+                    break;
+            }
+            
+            obstacles.push({
+                x: canvas.width,
+                y: groundY + 40 - height,
+                width: width,
+                height: height,
+                type: type
+            });
+        }
+
+        // Dessiner les obstacles
+        function drawObstacles() {
+            ctx.fillStyle = '#535353';
+            
+            obstacles.forEach(obstacle => {
+                // Corps principal du cactus
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                
+                // Branches (pour les plus grands cactus)
+                if (obstacle.height > 35) {
+                    ctx.fillRect(obstacle.x - 10, obstacle.y + 10, 10, 5);
+                    ctx.fillRect(obstacle.x - 10, obstacle.y + 10, 5, 15);
+                    ctx.fillRect(obstacle.x + obstacle.width, obstacle.y + 20, 10, 5);
+                    ctx.fillRect(obstacle.x + obstacle.width + 5, obstacle.y + 20, 5, 10);
+                }
+                
+                // Détails
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(obstacle.x + 5, obstacle.y + 5, 3, 3);
+                ctx.fillStyle = '#535353';
+            });
+        }
+
+        // Mettre à jour le jeu
+        function update() {
+            if (!gameRunning) return;
+
+            frameCount++;
+
+            // Saut
+            if (dino.jumping) {
+                dino.y += dino.jumpVelocity;
+                dino.jumpVelocity += gravity;
+
+                if (dino.y >= groundY) {
+                    dino.y = groundY;
+                    dino.jumping = false;
+                    dino.grounded = true;
+                    dino.jumpVelocity = 0;
+                }
+            }
+
+            // Générer des obstacles
+            if (frameCount % Math.floor(1000 / gameSpeed) === 0) {
+                if (Math.random() > 0.3) {
+                    createObstacle();
+                }
+            }
+
+            // Déplacer les obstacles
+            obstacles.forEach((obstacle, index) => {
+                obstacle.x -= gameSpeed;
+
+                // Supprimer les obstacles hors écran
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.splice(index, 1);
+                    score += 10;
+                    scoreElement.textContent = score;
+                    
+                    // Augmenter la vitesse
+                    if (score % 100 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                }
+
+                // Collision
+                if (
+                    dino.x < obstacle.x + obstacle.width - 5 &&
+                    dino.x + dino.width > obstacle.x + 5 &&
+                    dino.y < obstacle.y + obstacle.height - 5 &&
+                    dino.y + dino.height > obstacle.y + 5
+                ) {
+                    gameOver();
+                }
+            });
+        }
+
+        // Dessiner le jeu
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawGround();
+            drawDino();
+            drawObstacles();
+        }
+
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // Redémarrer le jeu
+        function restartGame() {
+            dino.y = groundY;
+            dino.jumping = false;
+            dino.grounded = true;
+            dino.jumpVelocity = 0;
+            
+            obstacles = [];
+            gameSpeed = 5;
+            score = 0;
+            frameCount = 0;
+            gameRunning = true;
+            
+            scoreElement.textContent = score;
+            gameOverScreen.style.display = 'none';
+            
+            loop();
+        }
+
+        // Boucle principale
+        function loop() {
+            if (!gameRunning) return;
+            
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Contrôles
+        document.addEventListener('keydown', (e) => {
+            if ((e.code === 'Space' || e.code === 'ArrowUp') && dino.grounded && gameRunning) {
+                dino.jumping = true;
+                dino.grounded = false;
+                dino.jumpVelocity = jumpPower;
+                e.preventDefault();
+            }
+        });
+
+        // Lancer le jeu
+        loop();
+    </script>
+</body>
+</html>
