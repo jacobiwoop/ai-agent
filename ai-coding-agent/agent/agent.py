@@ -16,9 +16,11 @@ class Agent:
         self,
         config: Config,
         confirmation_callback: Callable[[ToolConfirmation], bool] | None = None,
+        session: Session | None = None,
     ):
         self.config = config
-        self.session: Session | None = Session(self.config)
+        self._owns_session = session is None
+        self.session: Session | None = session or Session(self.config)
         self.session.approval_manager.confirmation_callback = confirmation_callback
 
     async def run(self, message: str):
@@ -168,7 +170,8 @@ class Agent:
         yield AgentEvent.agent_error(f"Maximum turns ({max_turns}) reached")
 
     async def __aenter__(self) -> Agent:
-        await self.session.initialize()
+        if self._owns_session and self.session:
+            await self.session.initialize()
         return self
 
     async def __aexit__(
@@ -177,7 +180,7 @@ class Agent:
         exc_val,
         exc_tb,
     ) -> None:
-        if self.session and self.session.client and self.session.mcp_manager:
+        if self._owns_session and self.session and self.session.client and self.session.mcp_manager:
             await self.session.client.close()
             await self.session.mcp_manager.shutdown()
             self.session = None

@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import subprocess
 import click
+from dotenv import load_dotenv
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.styles import Style
@@ -24,12 +25,12 @@ class CLI:
         self.config = config
         self.tui = TUI(config, console)
 
-    async def run_single(self, message: str) -> str | None:
-        async with Agent(self.config) as agent:
+    async def run_single(self, message: str, shared_session: Session) -> str | None:
+        async with Agent(self.config, session=shared_session) as agent:
             self.agent = agent
             return await self._process_message(message)
 
-    async def run_interactive(self) -> str | None:
+    async def run_interactive(self, shared_session: Session) -> str | None:
         self.tui.print_welcome(
             "AI Agent",
             lines=[
@@ -80,6 +81,7 @@ class CLI:
         async with Agent(
             self.config,
             confirmation_callback=self.tui.handle_confirmation,
+            session=shared_session,
         ) as agent:
             self.agent = agent
 
@@ -379,10 +381,19 @@ class CLI:
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Current working directory",
 )
+@click.option(
+    "--cli",
+    "cli_flag",
+    is_flag=True,
+    help="Start interactive CLI in foreground alongside background channels",
+)
 def main(
     prompt: str | None,
     cwd: Path | None,
+    cli_flag: bool,
 ):
+    load_dotenv()
+    
     try:
         config = load_config(cwd=cwd)
     except Exception as e:
@@ -396,15 +407,42 @@ def main(
 
         sys.exit(1)
 
-    cli = CLI(config)
+    cli_instance = CLI(config)
 
-    # messages = [{"role": "user", "content": prompt}]
-    if prompt:
-        result = asyncio.run(cli.run_single(prompt))
-        if result is None:
-            sys.exit(1)
-    else:
-        asyncio.run(cli.run_interactive())
+    async def run_app():
+        shared_session = Session(config)
+        await shared_session.initialize()
+
+        telegram_channel = None
+        if config.telegram_bot_token and config.telegram_authorized_chat_id:
+            try:
+                from channels.telegram_channel import TelegramChannel
+                telegram_channel = TelegramChannel(config, shared_session)
+                await telegram_channel.start()
+            except Exception as e:
+                console.print(f"[error]Failed to start Telegram channel: {e}[/error]")
+
+        try:
+            if prompt:
+                await cli_instance.run_single(prompt, shared_session)
+            elif cli_flag or (not telegram_channel):
+                await cli_instance.run_interactive(shared_session)
+            else:
+                console.print("[info]Telegram bot is running in the background. Use --cli to open the interactive terminal.[/info]")
+                await asyncio.Event().wait()
+                
+        finally:
+            if telegram_channel:
+                await telegram_channel.stop()
+            if shared_session.client:
+                await shared_session.client.close()
+            if shared_session.mcp_manager:
+                await shared_session.mcp_manager.shutdown()
+
+    try:
+        asyncio.run(run_app())
+    except KeyboardInterrupt:
+        pass
 
 
 main()

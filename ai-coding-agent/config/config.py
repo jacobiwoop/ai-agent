@@ -114,6 +114,14 @@ class Config(BaseModel):
         return os.environ.get("BASE_URL")
 
     @property
+    def telegram_bot_token(self) -> str | None:
+        return os.environ.get("TELEGRAM_BOT_TOKEN")
+
+    @property
+    def telegram_authorized_chat_id(self) -> str | None:
+        return os.environ.get("TELEGRAM_AUTHORIZED_CHAT_ID")
+
+    @property
     def model_name(self) -> str:
         return self.model.name
 
