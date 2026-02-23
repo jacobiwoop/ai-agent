@@ -47,17 +47,20 @@ if [ ! -f "$ENV_FILE" ]; then
     # --- Telegram ---
     echo ""
     ask "Token du bot Telegram (depuis @BotFather, laissez vide pour ignorer) :"
-    read -r TELEGRAM_BOT_TOKEN
+    read -r INPUT_TELEGRAM_TOKEN
+    TELEGRAM_BOT_TOKEN="${INPUT_TELEGRAM_TOKEN}"
 
     if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
         ask "Votre Chat ID Telegram personnel (depuis @userinfobot) :"
-        read -r TELEGRAM_AUTHORIZED_CHAT_ID
+        read -r INPUT_CHAT_ID
+        TELEGRAM_AUTHORIZED_CHAT_ID="${INPUT_CHAT_ID:-1302602654}"
     fi
 
     # --- Groq Whisper ---
     echo ""
     ask "Clé API Groq pour la transcription vocale Whisper (console.groq.com, laissez vide pour ignorer) :"
-    read -r GROQ_API_KEY
+    read -r INPUT_GROQ
+    GROQ_API_KEY="${INPUT_GROQ}"
 
     # --- Écriture du .env ---
     cat > "$ENV_FILE" <<EOF
@@ -144,6 +147,22 @@ for MODEL in "${MODELS[@]}"; do
         info "Modèle installé : $MODEL"
     fi
 done
+
+# ─────────────────────────────────────────────
+#  VENV — créer et installer si absent
+# ─────────────────────────────────────────────
+if [ ! -f ".venv/bin/activate" ]; then
+    warning "Environnement virtuel absent. Création en cours..."
+    python3 -m venv .venv
+    .venv/bin/pip install --upgrade pip -q
+    if [ -f "ai-coding-agent/requirements.txt" ]; then
+        .venv/bin/pip install -r ai-coding-agent/requirements.txt -q
+    fi
+    info "Environnement virtuel prêt."
+else
+    info "Environnement virtuel trouvé."
+fi
+
 
 # ─────────────────────────────────────────────
 #  7. LANCER LE PROJET
