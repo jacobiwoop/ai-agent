@@ -7,20 +7,81 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
 info()    { echo -e "${GREEN}[✔]${NC} $1"; }
 warning() { echo -e "${YELLOW}[~]${NC} $1"; }
 error()   { echo -e "${RED}[✘]${NC} $1"; exit 1; }
+ask()     { echo -e "${CYAN}[?]${NC} $1"; }
 
 # ─────────────────────────────────────────────
 #  1. SE PLACER DANS LE DOSSIER DU PROJET
 # ─────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
+ENV_FILE="ai-coding-agent/.env"
 
 # ─────────────────────────────────────────────
-#  2. VÉRIFIER / INSTALLER OLLAMA
+#  2. SETUP WIZARD — créer le .env si absent
+# ─────────────────────────────────────────────
+if [ ! -f "$ENV_FILE" ]; then
+    echo ""
+    echo -e "${BOLD}╔═══════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║       🛠  Configuration initiale           ║${NC}"
+    echo -e "${BOLD}╚═══════════════════════════════════════════╝${NC}"
+    echo ""
+    warning "Fichier .env absent. Lancement de l'assistant de configuration..."
+    echo ""
+
+    # --- LLM Backend ---
+    ask "URL du backend LLM (défaut: http://localhost:11434/v1 pour Ollama local) :"
+    read -r INPUT_BASE_URL
+    BASE_URL="${INPUT_BASE_URL:-http://localhost:11434/v1}"
+
+    ask "Clé API du backend LLM (défaut: ollama) :"
+    read -r INPUT_API_KEY
+    API_KEY="${INPUT_API_KEY:-ollama}"
+
+    # --- Telegram ---
+    echo ""
+    ask "Token du bot Telegram (depuis @BotFather, laissez vide pour ignorer) :"
+    read -r TELEGRAM_BOT_TOKEN
+
+    if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+        ask "Votre Chat ID Telegram personnel (depuis @userinfobot) :"
+        read -r TELEGRAM_AUTHORIZED_CHAT_ID
+    fi
+
+    # --- Groq Whisper ---
+    echo ""
+    ask "Clé API Groq pour la transcription vocale Whisper (console.groq.com, laissez vide pour ignorer) :"
+    read -r GROQ_API_KEY
+
+    # --- Écriture du .env ---
+    cat > "$ENV_FILE" <<EOF
+# Agent Configuration
+API_KEY=${API_KEY}
+BASE_URL=${BASE_URL}
+
+# Telegram Bot Integration
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+TELEGRAM_AUTHORIZED_CHAT_ID=${TELEGRAM_AUTHORIZED_CHAT_ID}
+
+# Groq Whisper - Transcription vocale
+GROQ_API_KEY=${GROQ_API_KEY}
+EOF
+
+    echo ""
+    info "Fichier .env créé avec succès → $ENV_FILE"
+    echo ""
+else
+    info "Fichier .env trouvé."
+fi
+
+# ─────────────────────────────────────────────
+#  3. VÉRIFIER / INSTALLER OLLAMA
 # ─────────────────────────────────────────────
 if ! command -v ollama &>/dev/null; then
     warning "Ollama non trouvé. Installation en cours..."
@@ -31,16 +92,13 @@ else
 fi
 
 # ─────────────────────────────────────────────
-#  3. VÉRIFIER / DÉMARRER LE SERVEUR OLLAMA
+#  4. VÉRIFIER / DÉMARRER LE SERVEUR OLLAMA
 # ─────────────────────────────────────────────
 if ! curl -s http://localhost:11434 &>/dev/null; then
     warning "Serveur Ollama inactif. Démarrage en arrière-plan..."
     ollama serve &>/dev/null &
-    # Attendre que le serveur soit prêt (max 15s)
     for i in $(seq 1 15); do
-        if curl -s http://localhost:11434 &>/dev/null; then
-            break
-        fi
+        if curl -s http://localhost:11434 &>/dev/null; then break; fi
         sleep 1
     done
     if ! curl -s http://localhost:11434 &>/dev/null; then
@@ -52,14 +110,10 @@ else
 fi
 
 # ─────────────────────────────────────────────
-#  4. CONNEXION OLLAMA (nécessaire pour les modèles Cloud)
+#  5. CONNEXION OLLAMA (modèles Cloud)
 # ─────────────────────────────────────────────
-# On détecte si on est connecté en vérifiant qu'un modèle cloud est accessible
 if ! ollama list 2>/dev/null | grep -q ":cloud"; then
-    warning "Connexion Ollama requise pour accéder aux modèles Cloud."
-    echo ""
-    echo "  Lancez la commande suivante si l'URL ne s'affiche pas automatiquement :"
-    echo "  → ollama login"
+    warning "Connexion Ollama requise pour les modèles Cloud."
     echo ""
     ollama login
     info "Connexion Ollama réussie."
@@ -68,7 +122,7 @@ else
 fi
 
 # ─────────────────────────────────────────────
-#  5. VÉRIFIER / INSTALLER LES MODÈLES
+#  6. VÉRIFIER / INSTALLER LES MODÈLES
 # ─────────────────────────────────────────────
 MODELS=(
     "gemma3:27b-cloud"
@@ -92,7 +146,7 @@ for MODEL in "${MODELS[@]}"; do
 done
 
 # ─────────────────────────────────────────────
-#  5. LANCER LE PROJET
+#  7. LANCER LE PROJET
 # ─────────────────────────────────────────────
 echo ""
 info "Lancement de l'agent AI..."
