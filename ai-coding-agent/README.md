@@ -80,4 +80,30 @@ An AI agent that can execute tasks using tools and manage conversations.
 
 #### RUN
 
+#### RUN
+
 API_KEY="ollama" BASE_URL="http://localhost:11434/v1" python ai-coding-agent/main.py
+
+## Deployment (New Server)
+
+To deploy the Agent and the Telegram Bot on a secondary server, you can use the generated `requirements.txt` file.
+
+1. Transfer the `.env` file and the `ai-coding-agent` codebase to the new server.
+2. Create and activate a new virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+3. Install dependencies:
+
+```bash
+pip install -r ai-coding-agent/requirements.txt
+```
+
+4. Start the Agent in the background:
+
+```bash
+python ai-coding-agent/main.py
+```
