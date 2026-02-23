@@ -136,8 +136,22 @@ Look for bugs, code smells, security issues, and improvement opportunities.
 Use read_file, list_dir and grep to examine the code.
 Do NOT modify any files.""",
     allowed_tools=["read_file", "grep", "list_dir"],
-    max_turns=10,
     timeout_seconds=300,
+)
+
+CHANNEL_CONFIGURATOR = SubagentDefinition(
+    name="channel_configurator",
+    description="Configures new communication channels like Telegram or WhatsApp dynamically by asking the user for credentials.",
+    goal_prompt="""You are a DevOps channel configuration specialist.
+Your job is to set up a new communication channel (like Telegram or WhatsApp) for this agent.
+1. Determine what information you need (e.g., BOT_TOKEN, CHAT_ID).
+2. Use the 'ask_user' tool to prompt the user directly for these credentials.
+3. Once you have the credentials, use 'write_file' or 'edit_file' to save them securely in the `.env` file or `config.py` as appropriate.
+4. If applicable, use 'shell' to restart a service or verify the configuration.
+Do NOT engage in unrelated tasks.""",
+    allowed_tools=["ask_user", "read_file", "write_file", "edit_file", "shell"],
+    max_turns=15,
+    timeout_seconds=600,
 )
 
 
@@ -145,4 +159,5 @@ def get_default_subagent_definitions() -> list[SubagentDefinition]:
     return [
         CODEBASE_INVESTIGATOR,
         CODE_REVIEWER,
+        CHANNEL_CONFIGURATOR,
     ]

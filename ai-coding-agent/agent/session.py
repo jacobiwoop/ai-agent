@@ -1,6 +1,6 @@
 from datetime import datetime
 import json
-from typing import Any
+from typing import Any, Callable, Awaitable
 import uuid
 from client.llm_client import LLMClient
 from config.config import Config
@@ -16,10 +16,14 @@ from tools.registry import create_default_registry
 
 
 class Session:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, ask_user_callback: Callable[[str], Awaitable[str]] | None = None):
         self.config = config
+        self.ask_user_callback = ask_user_callback
         self.client = LLMClient(config=config)
         self.tool_registry = create_default_registry(config)
+        for tool in self.tool_registry.get_tools():
+            tool.session = self
+        
         self.context_manager: ContextManager | None = None
         self.discovery_manager = ToolDiscoveryManager(
             self.config,

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Awaitable
 from config.config import Config
 from hooks.hook_system import HookSystem
 from safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
@@ -72,6 +72,7 @@ class ToolRegistry:
         cwd: Path,
         hook_system: HookSystem,
         approval_manager: ApprovalManager | None = None,
+        ask_user_callback: Callable[[str], Awaitable[str]] | None = None,
     ) -> ToolResult:
         tool = self.get(name)
         if tool is None:
@@ -100,6 +101,7 @@ class ToolRegistry:
         invocation = ToolInvocation(
             params=params,
             cwd=cwd,
+            ask_user_callback=ask_user_callback,
         )
         if approval_manager:
             confirmation = await tool.get_confirmation(invocation)

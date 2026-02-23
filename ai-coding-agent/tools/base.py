@@ -3,7 +3,7 @@ import abc
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from enum import Enum
-from typing import Any
+from typing import Any, Awaitable, Callable
 from dataclasses import dataclass, field
 from pydantic.json_schema import model_json_schema
 
@@ -92,6 +92,7 @@ class ToolResult:
 class ToolInvocation:
     params: dict[str, Any]
     cwd: Path
+    ask_user_callback: Callable[[str], Awaitable[str]] | None = None
 
 
 @dataclass

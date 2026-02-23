@@ -135,6 +135,7 @@ class Agent:
                     self.config.cwd,
                     self.session.hook_system,
                     self.session.approval_manager,
+                    self.session.ask_user_callback,
                 )
 
                 yield AgentEvent.tool_call_complete(

@@ -18,6 +18,8 @@ class TelegramChannel:
         self.session = session
         self.bot_token = config.telegram_bot_token
         self.authorized_chat_id = config.telegram_authorized_chat_id
+        self._pending_input_future: asyncio.Future | None = None
+        self._pending_input_future: asyncio.Future | None = None
         
         if not self.bot_token or not self.authorized_chat_id:
             raise ValueError("TELEGRAM_BOT_TOKEN or TELEGRAM_AUTHORIZED_CHAT_ID is missing in environment variables.")
@@ -62,6 +64,20 @@ class TelegramChannel:
             return
             
         user_message = update.message.text
+        
+        if self._pending_input_future and not self._pending_input_future.done():
+            self._pending_input_future.set_result(user_message)
+            return
+            
+        async def telegram_ask_user(question: str) -> str:
+            await update.message.reply_text(f"🤖 *Agent asks:* {question}", parse_mode="Markdown")
+            self._pending_input_future = asyncio.Future()
+            answer = await self._pending_input_future
+            self._pending_input_future = None
+            return answer
+
+        self.session.ask_user_callback = telegram_ask_user
+        
         status_msg = await update.message.reply_text("🤔 *Thinking...*", parse_mode="Markdown")
 
         async with Agent(self.config, session=self.session) as agent:

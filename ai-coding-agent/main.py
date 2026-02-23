@@ -26,6 +26,13 @@ class CLI:
         self.tui = TUI(config, console)
 
     async def run_single(self, message: str, shared_session: Session) -> str | None:
+        async def cli_ask_user(question: str) -> str:
+            from prompt_toolkit import PromptSession
+            sess = PromptSession()
+            return await sess.prompt_async(f"\n[ansiblue bold]Agent asks:[/ansiblue bold] {question}\n[user]> ")
+            
+        shared_session.ask_user_callback = cli_ask_user
+        
         async with Agent(self.config, session=shared_session) as agent:
             self.agent = agent
             return await self._process_message(message)
@@ -77,6 +84,11 @@ class CLI:
             "completion-menu.meta.completion.current": "bg:#00aa00 #ffffff",
         })
         prompt_session = PromptSession(completer=completer, style=style, complete_while_typing=True)
+
+        async def cli_ask_user(question: str) -> str:
+            return await prompt_session.prompt_async(f"\n[ansiblue bold]Agent asks:[/ansiblue bold] {question}\n[user]> ")
+
+        shared_session.ask_user_callback = cli_ask_user
 
         async with Agent(
             self.config,
